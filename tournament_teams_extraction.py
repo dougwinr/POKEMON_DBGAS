@@ -19,6 +19,11 @@ import json5
 import requests
 from tqdm.auto import tqdm
 
+from species_resolver import (
+    load_pokedex as load_local_pokedex,
+    resolve_species_id as resolve_species_name,
+)
+
 LOGGER = logging.getLogger(__name__)
 
 POKEDATA_BASE = "https://www.pokedata.ovh/standingsVGC"
@@ -69,6 +74,7 @@ class TournamentSummary:
 class PokemonExtraction:
     """Structured representation for a single Pokémon slot."""
 
+    raw_species: str
     species: str
     showdown_id: str
     tera_type: Optional[str]
@@ -449,13 +455,22 @@ def convert_decklist_entry(
     slot: Dict[str, Any],
     showdown_data: ShowdownData,
 ) -> PokemonExtraction:
-    species_label = slot.get("name") or "Unknown"
+    raw_species_label = slot.get("name") or "Unknown"
     tera_type = slot.get("teratype")
     ability = slot.get("ability")
     item = slot.get("item")
     moves = [move for move in slot.get("badges", []) if move]
-    species_id = showdown_data.resolve_species_id(species_label)
     issues: List[str] = []
+
+    resolved_species_id = resolve_species_name(
+        raw_species_label,
+        debug=LOGGER.isEnabledFor(logging.DEBUG),
+    )
+    species_id = resolved_species_id or showdown_data.resolve_species_id(raw_species_label)
+    species_label = raw_species_label
+    if species_id:
+        species_entry = showdown_data.pokedex.get(species_id, {})
+        species_label = species_entry.get("name", species_label)
     showdown_id = species_id or to_id(species_label)
     if tera_type and tera_type not in TERA_TYPES:
         issues.append(f"Unknown Tera Type '{tera_type}'")
@@ -478,6 +493,7 @@ def convert_decklist_entry(
     else:
         issues.append(f"Unable to resolve species '{species_label}'")
     return PokemonExtraction(
+        raw_species=raw_species_label,
         species=species_label,
         showdown_id=showdown_id,
         tera_type=tera_type,
@@ -641,6 +657,7 @@ def write_output(payload: Dict[str, Any], output_path: Path) -> None:
 
 def run_pipeline(args: argparse.Namespace) -> None:
     session = _session_factory()
+    load_local_pokedex(debug=args.debug)
     summaries = fetch_tournament_list(session)
     if args.limit:
         summaries = summaries[: args.limit]

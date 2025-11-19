@@ -9,11 +9,13 @@ authors = [
 ]
 dependencies = [
     "json5>=0.9.25",
+    "pandas>=2.2.0",
     "requests>=2.32.0",
     "tqdm>=4.66.0",
+    "ipykernel>=6.28.0"
 ]
 
 [project.optional-dependencies]
 dev = [
-    "pytest>=8.0.0",
+    "pytest>=8.0.0"
 ]

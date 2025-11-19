@@ -1,0 +1,94 @@
+Corviknight cannot learn Roost
+Ability 'Well-Baked Body' not found in Showdown data
+Milotic cannot learn Hypnosis
+Unable to resolve species 'Typhlosion [Hisuian Form]'
+Unable to resolve species 'Zoroark [Hisuian Form]'
+Unable to resolve species 'Tauros [Paldean Form - Aqua Breed]'
+Empoleon cannot learn Yawn
+Unable to resolve species 'Slowbro [Galarian Form]'
+Ability 'Thermal Exchange' not found in Showdown data
+Gothitelle cannot learn Heal Pulse
+Ability 'Sharpness' not found in Showdown data
+Kingambit cannot learn Sucker Punch
+Kleavor cannot learn Night Slash
+Golduck cannot learn Simple Beam
+Gholdengo cannot learn Aqua Jet
+Ability 'Armor Tail' not found in Showdown data
+Unable to resolve species 'Rotom [Wash Rotom]'
+Ability 'Good as Gold' not found in Showdown data
+Unable to resolve species 'Indeedee [Male]'
+Exeggutor cannot learn Sleep Powder
+Ability 'Supersweet Syrup' not found in Showdown data
+Ability 'Electromorphosis' not found in Showdown data
+Unable to resolve species 'Indeedee [Female]'
+Primarina cannot learn Moongeist Beam
+Meowscarada cannot learn Sucker Punch
+Item 'Ability Shield' not found in Showdown data
+Dachsbun cannot learn Yawn
+Unable to resolve species 'Maushold [Family of Four]'
+Houndstone cannot learn Howl
+Ribombee cannot learn Moonblast
+Ability 'Hospitality' not found in Showdown data
+Grimmsnarl cannot learn Parting Shot
+Unable to resolve species 'Maushold [Family of Three]'
+Ability 'Mind’s Eye' not found in Showdown data
+Smeargle cannot learn Follow Me
+Ability 'Mycelium Might' not found in Showdown data
+Unable to resolve species 'Lycanroc [Midday Form]'
+Incineroar cannot learn Parting Shot
+Toedscruel cannot learn Rage Powder
+Electabuzz cannot learn Feint
+Pawmot cannot learn Fake Out
+Smeargle cannot learn Tailwind
+Unable to resolve species 'Samurott [Hisuian Form]'
+Unable to resolve species 'Goodra [Hisuian Form]'
+Azumarill cannot learn Aqua Jet
+Unable to resolve species 'Ninetales [Alolan Form]'
+Bellibolt cannot learn Parabolic Charge
+Ability 'Purifying Salt' not found in Showdown data
+Unable to resolve species 'Sneasel [Hisuian Form]'
+Unable to resolve species 'Electrode [Hisuian Form]'
+Unable to resolve species 'Sinistcha [Unremarkable Form]'
+Smeargle cannot learn Surging Strikes
+Smeargle cannot learn Fake Out
+Serperior cannot learn Glare
+Blastoise cannot learn Water Spout
+Unable to resolve species 'Weezing [Galarian Form]'
+Unable to resolve species 'Persian [Alolan Form]'
+Azumarill cannot learn Belly Drum
+Rillaboom cannot learn Fake Out
+Ability 'Earth Eater' not found in Showdown data
+Item 'Fairy Feather' not found in Showdown data
+Unable to resolve species 'Basculegion [Female]'
+Item 'Mirror Herb' not found in Showdown data
+Unable to resolve species 'Toxtricity [Amped Form]'
+Conkeldurr cannot learn Mach Punch
+Unable to resolve species 'Lilligant [Hisuian Form]'
+Ability 'Toxic Debris' not found in Showdown data
+Ursaluna [Bloodmoon] cannot learn Yawn
+Item 'Covert Cloak' not found in Showdown data
+Unable to resolve species 'Arcanine [Hisuian Form]'
+Crocalor cannot learn Slack Off
+Quaquaval cannot learn Detect
+Sneasler cannot learn Fake Out
+Unable to resolve species 'Tauros [Paldean Form - Blaze Breed]'
+Hydreigon cannot learn Belch
+Item 'Loaded Dice' not found in Showdown data
+Ability 'Zero to Hero' not found in Showdown data
+Gastrodon cannot learn Yawn
+Item 'Clear Amulet' not found in Showdown data
+Smeargle cannot learn Decorate
+Magmortar cannot learn Follow Me
+Smeargle cannot learn Ruination
+Smeargle cannot learn Spiky Shield
+Unable to resolve species 'Braviary [Hisuian Form]'
+Unable to resolve species 'Tatsugiri [Curly Form]'
+Tandemaus cannot learn Follow Me
+Skeledirge cannot learn Slack Off
+Ability 'Commander' not found in Showdown data
+Vivillon cannot learn Rage Powder
+Unable to resolve species 'Basculegion [Male]'
+Whimsicott cannot learn Tickle
+Hariyama cannot learn Wide Guard
+Scovillain cannot learn Rage Powder
+Gothitelle cannot learn Fake Out
