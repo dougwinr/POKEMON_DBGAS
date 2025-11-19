@@ -7,16 +7,23 @@ import pytest
 
 sys.path.append(str(Path(__file__).resolve().parents[1]))
 
-import tournament_teams_extraction as tte  # noqa: E402
 from tournament_teams_extraction import ShowdownData, convert_decklist_entry  # noqa: E402
 
 
 def build_test_showdown_data() -> ShowdownData:
     pokedex = {
-        "slowbrogalar": {"name": "Slowbro-Galar"},
-        "taurospaldeaaqua": {"name": "Tauros-Paldea-Aqua"},
-        "sinistchaunremarkable": {"name": "Sinistcha-Unremarkable"},
-        "basculegionf": {"name": "Basculegion-F"},
+        "slowbrogalar": {"name": "Slowbro-Galar", "baseSpecies": "Slowbro", "forme": "Galar"},
+        "taurospaldeaaqua": {
+            "name": "Tauros-Paldea-Aqua",
+            "baseSpecies": "Tauros",
+            "forme": "Paldea-Aqua",
+        },
+        "sinistchaunremarkable": {
+            "name": "Sinistcha-Unremarkable",
+            "baseSpecies": "Sinistcha",
+            "forme": "Unremarkable",
+        },
+        "basculegionf": {"name": "Basculegion-F", "baseSpecies": "Basculegion", "forme": "F"},
     }
     learnsets = {key: {"learnset": {}} for key in pokedex}
     formats_data = {key: {} for key in pokedex}
@@ -48,21 +55,8 @@ def build_test_showdown_data() -> ShowdownData:
         ("Basculegion [Female]", "basculegionf", "Basculegion-F"),
     ],
 )
-def test_convert_decklist_entry_uses_species_resolver(monkeypatch, raw_name, expected_id, resolved_name):
+def test_convert_decklist_entry_uses_species_resolver(raw_name, expected_id, resolved_name):
     showdown_data = build_test_showdown_data()
-
-    mapping = {
-        "Slowbro [Galarian Form]": "slowbrogalar",
-        "Tauros [Paldean Form - Aqua Breed]": "taurospaldeaaqua",
-        "Sinistcha [Unremarkable Form]": "sinistchaunremarkable",
-        "Basculegion [Female]": "basculegionf",
-    }
-
-    def fake_resolver(name: str, debug: bool = False):
-        return mapping.get(name)
-
-    monkeypatch.setattr(tte, "resolve_species_name", fake_resolver)
-
     slot = {
         "name": raw_name,
         "badges": [],

@@ -7,7 +7,8 @@ import pytest
 
 sys.path.append(str(Path(__file__).resolve().parents[1]))
 
-from tournament_teams_extraction import (
+import tournament_teams_extraction as tte  # noqa: E402
+from tournament_teams_extraction import (  # noqa: E402
     ShowdownData,
     build_showdown_team_string,
     convert_decklist_entry,
@@ -152,6 +153,12 @@ def test_convert_decklist_entry_detects_illegal_move(showdown_data: ShowdownData
     # Moonblast is valid, Nonexistent Move should raise issue, and Paradox tag bans VGC Reg H.
     assert any("Nonexistent Move" in issue for issue in extraction.issues)
     assert extraction.valid_formats == ["gen9vgc2025regi"]
+    assert extraction.moves[0].move_id == "shadowball"
+    assert extraction.moves[0].is_legal
+    assert extraction.moves[1].move_id == "moonblast"
+    assert extraction.moves[1].is_legal
+    assert extraction.moves[2].move_id is None
+    assert not extraction.moves[2].is_legal
 
 
 def test_normalize_species_label_bracket_variants():
