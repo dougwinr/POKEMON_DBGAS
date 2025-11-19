@@ -1,0 +1,15 @@
+[project]
+name = "poke-dbgas"
+version = "0.1.0"
+description = "Pokemon Double Battle Genetic Algorithm Simulator"
+readme = "README.md"
+requires-python = ">=3.11,<3.15"
+authors = [
+    { name = "Douglas Winston" },
+]
+dependencies = []
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0.0",
+]
