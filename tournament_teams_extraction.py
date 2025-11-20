@@ -3,39 +3,36 @@ from __future__ import annotations
 import argparse
 import concurrent.futures
 import datetime as dt
-import difflib
-import html
 import json
 import logging
 import os
 import re
 import sys
-import unicodedata
 from dataclasses import dataclass, asdict, field
 from pathlib import Path
-from typing import Any, Callable, Dict, Iterable, List, Optional, Sequence, Tuple
+from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 from tqdm.auto import tqdm
 
-from pokedata_cache_manager import (
-    get_division_json,
-    get_index_html,
-    get_tournament_html,
+from pokedata_manager import (
+    POKEDATA_BASE,
+    load_local_index,
+    load_tournament_json,
+    load_tournament_page,
+    parse_divisions,
+    parse_tournament_list,
+    update_index,
+    update_tournament_json_files,
+    update_tournament_page,
 )
-from showdown_data_manager import (
-    load_abilities_data as load_abilities,
-    load_formats_data,
-    load_formats_list,
-    load_items_data as load_items,
-    load_learnsets_data as load_learnsets,
-    load_moves_data as load_moves,
-    load_pokedex_data as load_pokedex,
-    update_all_showdown_data,
+from showdown_manager import (
+    ShowdownManager,
+    normalize_species_label,
+    to_id,
 )
 
 LOGGER = logging.getLogger(__name__)
 
-POKEDATA_BASE = "https://www.pokedata.ovh/standingsVGC"
 TERA_TYPES = {
     "Bug",
     "Dark",
@@ -58,21 +55,6 @@ TERA_TYPES = {
     "Stellar",
 }
 DEFAULT_DIVISIONS = ("masters", "seniors", "juniors")
-REQUEST_TIMEOUT = 30
-CATEGORY_TAGS = {
-    "Restricted Legendary",
-    "Sub-Legendary",
-    "Mythical",
-    "Paradox",
-    "Ultra Beast",
-}
-MOVE_STRIP_WORDS = {
-    "doubles",
-    "singles",
-    "triples",
-    "battle",
-    "mode",
-}
 
 
 @dataclass
@@ -145,100 +127,6 @@ def configure_logging(debug: bool) -> None:
     )
 
 
-def to_id(value: str) -> str:
-    """Mimic Pokémon Showdown's toID helper."""
-
-    normalized = (
-        unicodedata.normalize("NFKD", value)
-        .encode("ascii", "ignore")
-        .decode("ascii")
-        .lower()
-    )
-    return re.sub(r"[^a-z0-9]+", "", normalized)
-
-
-DESCRIPTOR_TOKEN_MAP = {
-    "shadow": "Shadow",
-    "ice": "Ice",
-    "therian": "Therian",
-    "attack": "Attack",
-    "defense": "Defense",
-    "speed": "Speed",
-    "midnight": "Midnight",
-    "midday": "Midday",
-    "dusk": "Dusk",
-    "dawn": "Dawn",
-    "wings": "Wings",
-    "mane": "Mane",
-    "origin": "Origin",
-    "hero": "Hero",
-    "aqua": "Aqua",
-    "blaze": "Blaze",
-    "sky": "Sky",
-    "paldean": "Paldea",
-    "paldea": "Paldea",
-    "galarian": "Galar",
-    "galar": "Galar",
-    "alolan": "Alola",
-    "alola": "Alola",
-    "hisuian": "Hisui",
-    "hisui": "Hisui",
-    "female": "F",
-    "male": "M",
-    "unremarkable": "Unremarkable",
-    "family": "Family",
-    "breed": "",
-    "style": "",
-    "form": "",
-    "forme": "",
-    "aspect": "",
-    "rider": "",
-    "of": "",
-    "the": "",
-    "incarnate": "",
-    "standard": "",
-    "single": "Single",
-    "strike": "Strike",
-}
-
-
-def normalize_species_label(label: str) -> str:
-    """Map Pokedata naming quirks to Showdown-style species names."""
-
-    label = label.strip()
-    if "[" not in label or "]" not in label:
-        return label
-    base, descriptor = label.split("[", 1)
-    descriptor = descriptor.rstrip("]")
-    descriptor = descriptor.strip()
-    if not descriptor:
-        return base.strip()
-    tokens = [token for token in re.split(r"[^\w]+", descriptor.lower()) if token]
-    mapped_tokens: List[str] = []
-    for token in tokens:
-        replacement = DESCRIPTOR_TOKEN_MAP.get(token)
-        if replacement is None:
-            mapped_tokens.append(token.capitalize())
-        elif replacement:
-            mapped_tokens.append(replacement)
-    if not mapped_tokens:
-        return base.strip()
-    # collapse duplicate words like Dawn + Wings -> "Dawn-Wings"
-    combined: List[str] = []
-    skip_next = False
-    for idx, token in enumerate(mapped_tokens):
-        if skip_next:
-            skip_next = False
-            continue
-        if token in {"Dawn", "Dusk"} and idx + 1 < len(mapped_tokens) and mapped_tokens[idx + 1] in {"Wings", "Mane"}:
-            combined.append(f"{token}-{mapped_tokens[idx + 1]}")
-            skip_next = True
-        else:
-            combined.append(token)
-    suffix = "-".join(combined)
-    return f"{base.strip()}-{suffix}"
-
-
 def split_player_name(raw_name: str) -> Tuple[str, Optional[str]]:
     """Split 'Name [CC]' into 'Name' + ISO country if provided."""
 
@@ -248,268 +136,45 @@ def split_player_name(raw_name: str) -> Tuple[str, Optional[str]]:
     return match.group("name").strip(), match.group("country")
 
 
-def normalize_move_name(name: str) -> str:
-    text = unicodedata.normalize("NFKD", name).lower()
-    text = re.sub(r"[\"'`\[\]\(\)\-]", " ", text)
-    text = re.sub(r"[^a-z0-9\s]", " ", text)
-    tokens = [token for token in text.split() if token and token not in MOVE_STRIP_WORDS]
-    if not tokens:
-        return ""
-    return "".join(tokens)
 
-
-
-TOURNAMENT_BUTTON_RE = re.compile(
-    r'onclick\s*=\s*"location\.href=\'(?P<slug>[^/]+)/\'"[^>]*>(?P<label>.*?)</button>',
-    re.S,
-)
-DIVISION_BUTTON_RE = re.compile(
-    r'onclick\s*=\s*"location\.href=\'(?P<division>[a-z]+)/\'"',
-    re.I,
-)
-
-
-def parse_tournament_list(html_text: str) -> List[TournamentSummary]:
-    """Extract tournament summaries from the landing page."""
-
-    results: List[TournamentSummary] = []
-    for match in TOURNAMENT_BUTTON_RE.finditer(html_text):
-        slug = match.group("slug")
-        label = html.unescape(match.group("label"))
-        label_clean = re.sub(r"<.*?>", " ", label)
-        lines = [part.strip() for part in label_clean.splitlines() if part.strip()]
-        title = lines[0] if lines else slug
-        date_text = ""
-        if len(lines) > 1:
-            second = lines[1]
-            date_text = second[2:].strip() if second.startswith("-") else second
-        url = f"{POKEDATA_BASE}/{slug}/"
-        results.append(
+def load_tournament_summaries(*, force: bool = False, debug: bool = False) -> List[TournamentSummary]:
+    update_index(force=force, debug=debug)
+    html_text = load_local_index()
+    entries = parse_tournament_list(html_text)
+    summaries: List[TournamentSummary] = []
+    for entry in entries:
+        summaries.append(
             TournamentSummary(
-                tournament_id=slug,
-                name=title,
-                date_text=date_text,
-                url=url,
+                tournament_id=entry["tournament_id"],
+                name=entry["name"],
+                date_text=entry["date_text"],
+                url=entry["url"],
             )
         )
-    return results
+    return summaries
 
 
-def parse_divisions(html_text: str) -> List[str]:
-    """Find available divisions for a tournament."""
-
-    return sorted({match.group("division").lower() for match in DIVISION_BUTTON_RE.finditer(html_text)})
-
-
-def fetch_tournament_list(*, force: bool = False, debug: bool = False) -> List[TournamentSummary]:
-    html_text = get_index_html(force=force, debug=debug)
-    return parse_tournament_list(html_text)
-
-
-def fetch_divisions(tournament_id: str, *, force: bool = False, debug: bool = False) -> List[str]:
-    html_text = get_tournament_html(tournament_id, force=force, debug=debug)
+def load_available_divisions(tournament_id: str, *, force: bool = False, debug: bool = False) -> List[str]:
+    update_tournament_page(tournament_id, force=force, debug=debug)
+    html_text = load_tournament_page(tournament_id)
     divisions = parse_divisions(html_text)
     return divisions or ["masters"]
 
 
-def fetch_division_payload(
+def load_division_payload(
     tournament_id: str,
     division: str,
     *,
     force: bool = False,
     debug: bool = False,
 ) -> List[Dict[str, Any]]:
-    data = get_division_json(tournament_id, division, force=force, debug=debug)
-    if not isinstance(data, list):
-        raise ExtractionError(f"Unexpected payload for {tournament_id}/{division}")
-    return data
-
-
-@dataclass
-class ShowdownData:
-    """Container around the Showdown static data set."""
-
-    pokedex: Dict[str, Dict[str, Any]]
-    moves: Dict[str, Dict[str, Any]]
-    items: Dict[str, Dict[str, Any]]
-    abilities: Dict[str, Dict[str, Any]]
-    learnsets: Dict[str, Dict[str, Any]]
-    formats_data: Dict[str, Dict[str, Any]]
-    formats: List[Dict[str, Any]]
-    species_alias_map: Dict[str, str]
-    move_alias_map: Dict[str, str]
-    item_alias_map: Dict[str, str]
-    ability_alias_map: Dict[str, str]
-
-    @classmethod
-    def from_payloads(
-        cls,
-        *,
-        pokedex: Dict[str, Dict[str, Any]],
-        moves: Dict[str, Dict[str, Any]],
-        items: Dict[str, Dict[str, Any]],
-        abilities: Dict[str, Dict[str, Any]],
-        learnsets: Dict[str, Dict[str, Any]],
-        formats_data: Dict[str, Dict[str, Any]],
-        formats: List[Dict[str, Any]],
-    ) -> "ShowdownData":
-        species_alias_map = cls._build_species_alias_map(pokedex)
-        move_alias_map = cls._build_simple_alias_map(moves, normalizer=normalize_move_name)
-        item_alias_map = cls._build_simple_alias_map(items)
-        ability_alias_map = cls._build_simple_alias_map(abilities)
-        for fmt in formats:
-            fmt.setdefault("id", to_id(fmt.get("name", "")))
-        return cls(
-            pokedex,
-            moves,
-            items,
-            abilities,
-            learnsets,
-            formats_data,
-            formats,
-            species_alias_map,
-            move_alias_map,
-            item_alias_map,
-            ability_alias_map,
-        )
-
-    @staticmethod
-    def _build_species_alias_map(pokedex: Dict[str, Dict[str, Any]]) -> Dict[str, str]:
-        alias_map: Dict[str, str] = {}
-        for sid, entry in pokedex.items():
-            names = {entry.get("name", ""), sid}
-            base = entry.get("baseSpecies")
-            forme = entry.get("forme")
-            if base:
-                names.add(base)
-            if base and forme:
-                names.add(f"{base}-{forme}")
-                names.add(f"{base} {forme}")
-                names.add(f"{base} [{forme}]")
-                names.add(f"{base} ({forme})")
-                if forme.lower() == "shadow":
-                    names.add(f"{base} Shadow Rider")
-                if forme.lower() == "ice":
-                    names.add(f"{base} Ice Rider")
-            for name in names:
-                token = to_id(name)
-                if token and token not in alias_map:
-                    alias_map[token] = sid
-        return alias_map
-
-    @staticmethod
-    def _build_simple_alias_map(
-        entries: Dict[str, Dict[str, Any]], *, normalizer: Callable[[str], str] = to_id
-    ) -> Dict[str, str]:
-        alias_map: Dict[str, str] = {}
-        for entry_id, entry in entries.items():
-            names = {entry_id}
-            if isinstance(entry, dict):
-                name_value = entry.get("name")
-                if isinstance(name_value, str):
-                    names.add(name_value)
-                aliases = entry.get("aliases")
-                if isinstance(aliases, list):
-                    names.update(filter(None, map(str, aliases)))
-            for name in names:
-                token = normalizer(name)
-                if token and token not in alias_map:
-                    alias_map[token] = entry_id
-        return alias_map
-
-    def resolve_species_id(self, label: str) -> Optional[str]:
-        normalized = normalize_species_label(label)
-        token = to_id(normalized)
-        if token in self.species_alias_map:
-            return self.species_alias_map[token]
-        fallback = to_id(label)
-        return self.species_alias_map.get(fallback)
-
-    def resolve_item_id(self, name: str) -> Optional[str]:
-        token = to_id(name)
-        return self.item_alias_map.get(token)
-
-    def resolve_ability_id(self, name: str) -> Optional[str]:
-        token = to_id(name)
-        return self.ability_alias_map.get(token)
-
-    def resolve_move_id(self, name: str) -> Optional[str]:
-        token = normalize_move_name(name)
-        if token in self.move_alias_map:
-            return self.move_alias_map[token]
-        fallback = to_id(name)
-        if fallback in self.move_alias_map:
-            return self.move_alias_map[fallback]
-        if self.move_alias_map:
-            matches = difflib.get_close_matches(token, self.move_alias_map.keys(), n=1, cutoff=0.72)
-            if matches:
-                return self.move_alias_map[matches[0]]
-        return None
-
-
-def load_showdown_data(debug: bool = False) -> ShowdownData:
-    update_all_showdown_data(debug=debug)
-    return ShowdownData.from_payloads(
-        pokedex=load_pokedex(debug=debug),
-        moves=load_moves(debug=debug),
-        items=load_items(debug=debug),
-        abilities=load_abilities(debug=debug),
-        learnsets=load_learnsets(debug=debug),
-        formats_data=load_formats_data(debug=debug),
-        formats=load_formats_list(debug=debug),
-    )
-
-
-def validate_move_learnset(showdown_data: ShowdownData, species_id: str, move_id: str) -> bool:
-    learnset = showdown_data.learnsets.get(species_id, {}).get("learnset", {})
-    if move_id in learnset:
-        return True
-    base_species = showdown_data.pokedex.get(species_id, {}).get("baseSpecies")
-    if base_species:
-        base_id = showdown_data.species_alias_map.get(to_id(base_species))
-        if base_id:
-            learnset = showdown_data.learnsets.get(base_id, {}).get("learnset", {})
-            return move_id in learnset
-    return False
-
-
-def determine_valid_formats(
-    showdown_data: ShowdownData, species_id: str, *, restrict_to_vgc: bool = True
-) -> List[str]:
-    entry = showdown_data.pokedex.get(species_id, {})
-    formats_meta = showdown_data.formats_data.get(species_id, {})
-    if entry.get("isNonstandard") in {"Past", "Future", "Unobtainable"}:
-        return []
-    if formats_meta.get("isNonstandard") in {"Past", "Future", "Unobtainable"}:
-        return []
-    tags = set(entry.get("tags") or [])
-    valid: List[str] = []
-    for fmt in showdown_data.formats:
-        if restrict_to_vgc and "vgc" not in fmt.get("name", "").lower():
-            continue
-        fmt_id = fmt.get("id") or to_id(fmt.get("name", ""))
-        if not fmt_id:
-            continue
-        if fmt.get("gameType") and fmt["gameType"] != "doubles":
-            continue
-        banlist_entries = fmt.get("banlist", [])
-        banlist = {to_id(item) for item in banlist_entries}
-        if species_id in banlist:
-            continue
-        banned = False
-        for tag_entry in banlist_entries:
-            if tag_entry in CATEGORY_TAGS and tag_entry in tags:
-                banned = True
-                break
-        if banned:
-            continue
-        valid.append(fmt_id)
-    return sorted(valid)
+    update_tournament_json_files(tournament_id, [division], force=force, debug=debug)
+    return load_tournament_json(tournament_id, division)
 
 
 def convert_decklist_entry(
     slot: Dict[str, Any],
-    showdown_data: ShowdownData,
+    showdown: ShowdownManager,
 ) -> PokemonExtraction:
     raw_species_label = slot.get("name") or "Unknown"
     tera_type = slot.get("teratype")
@@ -518,24 +183,24 @@ def convert_decklist_entry(
     moves = [move for move in slot.get("badges", []) if move]
     issues: List[str] = []
 
-    species_id = showdown_data.resolve_species_id(raw_species_label)
+    species_id = showdown.resolve_species_id(raw_species_label)
     species_label = raw_species_label
     if species_id:
-        species_entry = showdown_data.pokedex.get(species_id, {})
+        species_entry = showdown.pokedex.get(species_id, {})
         species_label = species_entry.get("name", species_label)
     showdown_id = species_id or to_id(species_label)
     if tera_type and tera_type not in TERA_TYPES:
         issues.append(f"Unknown Tera Type '{tera_type}'")
-    if ability and not showdown_data.resolve_ability_id(ability):
+    if ability and not showdown.resolve_ability_id(ability):
         issues.append(f"Ability '{ability}' not found in Showdown data")
-    if item and not showdown_data.resolve_item_id(item):
+    if item and not showdown.resolve_item_id(item):
         issues.append(f"Item '{item}' not found in Showdown data")
     move_entries: List[MoveExtraction] = []
     for move in moves:
-        move_id = showdown_data.resolve_move_id(move)
+        move_id = showdown.resolve_move_id(move)
         move_name = move
         if move_id:
-            move_meta = showdown_data.moves.get(move_id)
+            move_meta = showdown.moves.get(move_id)
             if move_meta:
                 move_name = move_meta.get("name", move_name)
             else:
@@ -545,7 +210,7 @@ def convert_decklist_entry(
             issues.append(f"Move '{move}' not found in Showdown data")
         is_legal = False
         if move_id and species_id:
-            if validate_move_learnset(showdown_data, species_id, move_id):
+            if showdown.can_species_learn_move(species_id, move_id):
                 is_legal = True
             else:
                 issues.append(f"{species_label} cannot learn {move_name}")
@@ -561,7 +226,7 @@ def convert_decklist_entry(
         )
     valid_formats: List[str] = []
     if species_id:
-        valid_formats = determine_valid_formats(showdown_data, species_id)
+        valid_formats = showdown.determine_valid_formats(species_id)
     else:
         issues.append(f"Unable to resolve species '{species_label}'")
     return PokemonExtraction(
@@ -598,12 +263,15 @@ def build_showdown_team_string(pokemon: Sequence[PokemonExtraction]) -> str:
 
 def transform_player(
     player: Dict[str, Any],
-    showdown_data: ShowdownData,
+    showdown_data_dir: str,
 ) -> PlayerExtraction:
+    # Create a fresh ShowdownManager instance for this process
+    # (avoids pickling issues and each process reads from shared local files)
+    showdown = ShowdownManager(data_dir=showdown_data_dir)
     player_name, country = split_player_name(player.get("name", "Unknown"))
     placing = player.get("placing")
     decklist: List[Dict[str, Any]] = player.get("decklist") or []
-    pokemon = [convert_decklist_entry(slot, showdown_data) for slot in decklist]
+    pokemon = [convert_decklist_entry(slot, showdown) for slot in decklist]
     issues = [issue for slot in pokemon for issue in slot.issues]
     record = player.get("record") or {}
     showdown_team = build_showdown_team_string(pokemon)
@@ -624,23 +292,23 @@ def process_tournament(
     summary: TournamentSummary,
     *,
     divisions: Sequence[str],
-    showdown_data: ShowdownData,
+    showdown_data_dir: str,
     process_pool: concurrent.futures.ProcessPoolExecutor,
     cache_force: bool,
     debug: bool,
 ) -> List[TournamentDivisionResult]:
-    available_divisions = fetch_divisions(summary.tournament_id, force=cache_force, debug=debug)
+    available_divisions = load_available_divisions(summary.tournament_id, force=cache_force, debug=debug)
     target_divisions = [div for div in divisions if div in available_divisions]
     results: List[TournamentDivisionResult] = []
     for division in target_divisions:
-        players_payload = fetch_division_payload(
+        players_payload = load_division_payload(
             summary.tournament_id,
             division,
             force=cache_force,
             debug=debug,
         )
         player_futures = [
-            process_pool.submit(transform_player, player, showdown_data) for player in players_payload
+            process_pool.submit(transform_player, player, showdown_data_dir) for player in players_payload
         ]
         extracted: List[PlayerExtraction] = []
         for future in concurrent.futures.as_completed(player_futures):
@@ -660,7 +328,7 @@ def process_tournaments(
     summaries: Sequence[TournamentSummary],
     *,
     divisions: Sequence[str],
-    showdown_data: ShowdownData,
+    showdown_data_dir: str,
     max_workers: int,
     cache_force: bool,
     debug: bool,
@@ -675,7 +343,7 @@ def process_tournaments(
                     process_tournament,
                     summary,
                     divisions=divisions,
-                    showdown_data=showdown_data,
+                    showdown_data_dir=showdown_data_dir,
                     process_pool=process_pool,
                     cache_force=cache_force,
                     debug=debug,
@@ -732,9 +400,11 @@ def write_output(payload: Dict[str, Any], output_path: Path) -> None:
 
 
 def run_pipeline(args: argparse.Namespace) -> None:
-    showdown_data = load_showdown_data(debug=args.debug)
+    showdown = ShowdownManager()
+    showdown.download_or_update_all(debug=args.debug)
+    showdown_data_dir = str(showdown.data_dir)
     force_pokedata = args.refresh_pokedata
-    summaries = fetch_tournament_list(force=force_pokedata, debug=args.debug)
+    summaries = load_tournament_summaries(force=force_pokedata, debug=args.debug)
     if args.limit:
         summaries = summaries[: args.limit]
     divisions = args.divisions.split(",") if isinstance(args.divisions, str) else list(args.divisions)
@@ -745,7 +415,7 @@ def run_pipeline(args: argparse.Namespace) -> None:
     results = process_tournaments(
         summaries,
         divisions=divisions,
-        showdown_data=showdown_data,
+        showdown_data_dir=showdown_data_dir,
         max_workers=max_workers,
         cache_force=force_pokedata,
         debug=args.debug,

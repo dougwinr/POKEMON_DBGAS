@@ -21,13 +21,13 @@ uv run python --version
 - Seed or refresh the Showdown data cache when needed:
 
 ```bash
-uv run python -c "from showdown_data_manager import update_all_showdown_data; update_all_showdown_data(force=True, debug=True)"
+uv run python -c "from showdown_manager import ShowdownManager; manager = ShowdownManager(); manager.download_or_update_all(debug=True)"
 ```
 
 - Seed or refresh PokeData standings locally (optional before large runs):
 
 ```bash
-uv run python -c "from pokedata_cache_manager import get_index_html; get_index_html(force=True, debug=True)"
+uv run python -c "from pokedata_manager import update_index; update_index(force=True, debug=True)"
 ```
 
 ## Data Collection / Scraping
@@ -57,9 +57,9 @@ uv run python tournament_teams_extraction.py \
 - `--refresh-pokedata`: Forces re-download of all PokeData HTML/JSON before processing.
 
 Behind the scenes, the CLI:
-1. Calls `showdown_data_manager.update_all_showdown_data()` once to ensure local Showdown files are current.
-2. Uses `pokedata_cache_manager` to cache every tournament/division page under `data/pokedata/`.
-3. Resolves species, moves, abilities, items, and format legality exclusively from disk.
+1. Creates a `ShowdownManager` instance and calls `download_or_update_all()` once to ensure local Showdown files are current.
+2. Uses `pokedata_manager` to cache every tournament/division page under `data/pokedata/`.
+3. Resolves species, moves, abilities, items, and format legality exclusively from disk using the `ShowdownManager`.
 
 ## Debug & Logging
 - Pass `--debug` to `tournament_teams_extraction.py` to print detailed status covering cache hits/misses, Showdown resolution steps, and validation failures.
